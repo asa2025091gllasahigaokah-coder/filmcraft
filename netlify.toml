@@ -1,0 +1,8 @@
+[build]
+  publish = "apps/filmcraft-web/dist"
+  command = "rustup target add wasm32-unknown-unknown && cargo install trunk && trunk build --release apps/filmcraft-web/web/index.html"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

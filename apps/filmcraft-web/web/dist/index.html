@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>FilmCraft</title>
+  <link rel="icon" href="favicon.png" type="image/png">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1c1f; }
+    canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    #loading {
+      position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px;
+      align-items: center; justify-content: center; color: #c9c9cc;
+      font: 14px/1.4 system-ui, sans-serif; pointer-events: none;
+    }
+    #loading img { width: 56px; height: 56px; }
+    #loading .err { color: #ff8a7a; white-space: pre-wrap; max-width: 70ch; pointer-events: auto; }
+    #fatal {
+      position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+      background: rgba(20, 20, 22, 0.88); color: #e6e6e8; font: 14px/1.45 system-ui, sans-serif; z-index: 10;
+    }
+    #fatal.on { display: flex; }
+    #fatal .box { max-width: min(78ch, calc(100vw - 32px)); padding: 20px 24px; background: #26272b; border-radius: 8px; }
+    #fatal h1 { margin: 0 0 8px; font-size: 17px; color: #ff8a7a; }
+    #fatal pre { max-height: 40vh; overflow: auto; white-space: pre-wrap; font-size: 12px; color: #c9c9cc; }
+    #fatal button { font: inherit; padding: 6px 14px; border: 0; border-radius: 6px; background: #3b6fe0; color: #fff; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <canvas id="filmcraft_canvas"></canvas>
+  <div id="loading"><img src="favicon.png" alt=""><div id="status">Loading FilmCraft…</div></div>
+  <div id="fatal" role="alertdialog" aria-labelledby="fatal-title">
+    <div class="box">
+      <h1 id="fatal-title">FilmCraft stopped working</h1>
+      <div>Unsaved changes are kept in the browser every few seconds and come back when you reload.</div>
+      <pre id="fatal-msg"></pre>
+      <button id="fatal-reload" type="button">Reload</button>
+    </div>
+  </div>
+  <script>
+    // A Rust panic (or an out-of-memory abort) inside a frame stops the app for good: eframe logs
+    // "panicked at …" with console.error, then the wasm traps ("RuntimeError: unreachable") and
+    // the canvas freezes or goes blank. Show what happened instead of a dead page.
+    window.filmcraftLoad = {};
+    let lastPanic = null;
+    const consoleError = console.error.bind(console);
+    console.error = (...a) => {
+      const m = a.map(String).join(" ");
+      if (/panicked at|memory allocation of/.test(m)) lastPanic = m;
+      consoleError(...a);
+    };
+    window.filmcraftFatal = (what) => {
+      if (window.filmcraftLoad.fatal) return;
+      const msg = lastPanic || String(what && (what.stack || what.message) || what);
+      window.filmcraftLoad.fatal = msg;
+      const el = document.getElementById("fatal");
+      document.getElementById("fatal-msg").textContent = msg.split("\n\nStack:")[0];
+      el.classList.add("on");
+    };
+    document.getElementById("fatal-reload").onclick = () => location.reload();
+    const isFatal = (e) => e instanceof WebAssembly.RuntimeError || /panicked at|unreachable|memory access out of bounds/.test(String(e && e.message || e));
+    // only after start-up: a failed start is shown in #loading below
+    addEventListener("error", (ev) => { if (window.filmcraftLoad.readyMs && isFatal(ev.error || ev.message)) window.filmcraftFatal(ev.error || ev.message); });
+    addEventListener("unhandledrejection", (ev) => { if (window.filmcraftLoad.readyMs && isFatal(ev.reason)) window.filmcraftFatal(ev.reason); });
+  </script>
+  <script type="module">
+    // `__FC_BUILD__` is replaced by `cargo xtask web` with a hash of the build: the glue and the
+    // wasm are cached as immutable, so their URLs must change with every build.
+    const build = "__FC_BUILD__";
+    const v = build.startsWith("__") ? "" : "?v=" + build;
+    const t0 = performance.now();
+    const params = new URLSearchParams(location.search);
+    try {
+      const { default: init, start } = await import("./filmcraft_web.js" + v);
+      await init({ module_or_path: new URL("filmcraft_web_bg.wasm" + v, location.href) });
+      window.filmcraftLoad.wasmMs = performance.now() - t0;
+      await start("filmcraft_canvas");
+      window.filmcraftLoad.readyMs = performance.now() - t0;
+    } catch (e) {
+      const text = String(e && e.stack || e);
+      window.filmcraftLoad.error = String(e);
+      // WebGPU was found but could not be started: try again on WebGL2 (once)
+      if (!params.has("webgl") && !params.has("cpu") && /wgpu|webgpu|requestDevice|requestAdapter|GPUDevice|surface/i.test(text)) {
+        params.set("webgl", "");
+        location.replace(location.pathname + "?" + params.toString().replace(/=(&|$)/g, "$1") + location.hash);
+      } else {
+        const s = document.getElementById("status");
+        if (s) { s.className = "err"; s.textContent = "FilmCraft failed to start:\n" + text; }
+      }
+      throw e;
+    }
+  </script>
+<script>"use strict";
+
+(function () {
+
+    const address = '{{__TRUNK_ADDRESS__}}';
+    const base = '{{__TRUNK_WS_BASE__}}';
+    let protocol = '';
+    protocol =
+        protocol
+            ? protocol
+            : window.location.protocol === 'https:'
+                ? 'wss'
+                : 'ws';
+    const url = protocol + '://' + address + base + '.well-known/trunk/ws';
+
+    class Overlay {
+        constructor() {
+            // create an overlay
+            this._overlay = document.createElement("div");
+            const style = this._overlay.style;
+            style.height = "100vh";
+            style.width = "100vw";
+            style.position = "fixed";
+            style.top = "0";
+            style.left = "0";
+            style.backgroundColor = "rgba(222, 222, 222, 0.5)";
+            style.fontFamily = "sans-serif";
+            // not sure that's the right approach
+            style.zIndex = "1000000";
+            style.backdropFilter = "blur(1rem)";
+
+            const container = document.createElement("div");
+            // center it
+            container.style.position = "absolute";
+            container.style.top = "30%";
+            container.style.left = "15%";
+            container.style.maxWidth = "85%";
+
+            this._title = document.createElement("div");
+            this._title.innerText = "Build failure";
+            this._title.style.paddingBottom = "2rem";
+            this._title.style.fontSize = "2.5rem";
+
+            this._message = document.createElement("div");
+            this._message.style.whiteSpace = "pre-wrap";
+
+            const icon= document.createElement("div");
+            icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="#dc3545" viewBox="0 0 16 16"><path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>';
+            this._title.prepend(icon);
+
+            container.append(this._title, this._message);
+            this._overlay.append(container);
+
+            this._inject();
+            window.setInterval(() => {
+                this._inject();
+            }, 250);
+        }
+
+        set reason(reason) {
+            this._message.textContent = reason;
+        }
+
+        _inject() {
+            if (!this._overlay.isConnected) {
+                // prepend it
+                document.body?.prepend(this._overlay);
+            }
+        }
+
+    }
+
+    class Client {
+        constructor(url) {
+            this.url = url;
+            this.poll_interval = 5000;
+            this._overlay = null;
+        }
+
+        start() {
+            const ws = new WebSocket(this.url);
+            ws.onmessage = (ev) => {
+                const msg = JSON.parse(ev.data);
+                switch (msg.type) {
+                    case "reload":
+                        this.reload();
+                        break;
+                    case "buildFailure":
+                        this.buildFailure(msg.data)
+                        break;
+                }
+            };
+            ws.onclose = this.onclose;
+        }
+
+        onclose() {
+            window.setTimeout(
+                () => {
+                    // when we successfully reconnect, we'll force a
+                    // reload (since we presumably lost connection to
+                    // trunk due to it being killed, so it will have
+                    // rebuilt on restart)
+                    const ws = new WebSocket(this.url);
+                    ws.onopen = () => window.location.reload();
+                    ws.onclose = this.onclose;
+                },
+                this.poll_interval);
+        }
+
+        reload() {
+            window.location.reload();
+        }
+
+        buildFailure({reason}) {
+            // also log the console
+            console.error("Build failed:", reason);
+
+            console.debug("Overlay", this._overlay);
+
+            if (!this._overlay) {
+                this._overlay = new Overlay();
+            }
+            this._overlay.reason = reason;
+        }
+    }
+
+    new Client(url).start();
+
+})()
+</script></body>
+</html>

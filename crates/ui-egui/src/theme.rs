@@ -419,16 +419,17 @@ pub fn font_families() -> Vec<FontFamily> {
 /// egui visuals. Document names keep their glyphs in every interface language.
 pub fn install(ctx: &egui::Context, t: &Tokens) {
     let mut fonts = FontDefinitions::default();
+
+    // 標準フォントの登録（アプリ本体の基本UI用）
     fonts.font_data.insert("inter".into(), Arc::new(FontData::from_static(filmcraft_text::fonts::INTER_REGULAR)));
     fonts.font_data.insert("inter-medium".into(), Arc::new(FontData::from_static(filmcraft_text::fonts::INTER_MEDIUM)));
     fonts.font_data.insert("inter-semibold".into(), Arc::new(FontData::from_static(filmcraft_text::fonts::INTER_SEMIBOLD)));
     fonts.font_data.insert("jbmono".into(), Arc::new(FontData::from_static(filmcraft_text::fonts::JETBRAINS_MONO_REGULAR)));
+
+    // 優先度設定
     fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "inter".into());
     fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "jbmono".into());
-    fonts.families.insert(FontFamily::Name("semibold".into()), vec!["inter-semibold".into(), "inter".into()]);
-    fonts.families.insert(FontFamily::Name("medium".into()), vec!["inter-medium".into(), "inter".into()]);
-    // Japanese before Chinese: the two share code points, and Japanese text must keep Japanese
-    // glyph forms; Chinese faces still cover the hanzi Japanese fonts lack
+
     add_craft_fonts(&mut fonts);
     crate::cjk::install(&mut fonts);
     crate::rtl::install(&mut fonts);
@@ -436,14 +437,15 @@ pub fn install(ctx: &egui::Context, t: &Tokens) {
     apply_visuals(ctx, t);
 }
 
+/// Append the Japanese craft-fonts (empty unless built with `CRAFT_FONTS_DIR`) as the last fallbacks
+/// of every font family, after the app's own fonts: BIZ UDPGothic first (bold before regular in
+/// the "semibold" and "medium" families), then the other Japanese faces.
 /// Name of the egui font for a craft-fonts entry.
 fn craft_font_name(f: &filmcraft_text::fonts::CraftFont) -> String {
     format!("craft:{} {}", f.family, f.style)
 }
 
-/// Append the Japanese craft-fonts (empty unless built with `CRAFT_FONTS_DIR`) as the last fallbacks
-/// of every font family, after the app's own fonts: BIZ UDPGothic first (bold before regular in
-/// the "semibold" and "medium" families), then the other Japanese faces.
+
 fn add_craft_fonts(fonts: &mut FontDefinitions) {
     let jpan: Vec<_> = filmcraft_text::fonts::craft_japanese().collect();
     for f in &jpan {

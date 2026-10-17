@@ -1,0 +1,7 @@
+[build]
+target = "web/index.html"
+
+[serve]
+port = 8080
+[[assets]]
+copy_dir = "assets"
