@@ -1,6 +1,9 @@
 [build]
   publish = "apps/filmcraft-web/dist"
-  command = "rustup default stable && rustup target add wasm32-unknown-unknown && wget -qO- https://github.com/trunk-rs/trunk/releases/download/v0.21.5/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf - -C /tmp && cd apps/filmcraft-web && /tmp/trunk build web/index.html --release"
+  command = "rustup default stable && rustup target add wasm32-unknown-unknown && wget -qO- https://github.com/trunk-rs/trunk/releases/download/v0.21.5/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf - -C /tmp && chmod +x /tmp/trunk && cd apps/filmcraft-web && RUSTFLAGS='-C link-arg=-s' /tmp/trunk build web/index.html --release"
+
+[build.environment]
+  NODE_OPTIONS = "--max-old-space-size=8192"
 
 [[redirects]]
   from = "/*"
